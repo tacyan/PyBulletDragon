@@ -39,6 +39,23 @@
 python game.py
 ```
 
+## アプリケーションの配布方法
+
+Pyxel ではプラットフォームによらず動作する、専用のアプリケーション配布ファイル形式 (Pyxel アプリケーションファイル) をサポートしています。
+
+Pyxel アプリケーションファイル (.pyxapp) は、pyxel packageコマンドで作成します。
+
+```
+pyxel package アプリケーションのディレクトリ 起動スクリプトファイル
+```
+
+Pyxel アプリケーションファイルは、pyxel app2exeコマンドやpyxel app2htmlコマンドで、実行可能ファイルや HTML ファイルに変換できます。
+ここでは、PyBulletDragon.pyxappをHTML形式にしたら、PyBulletDragon.htmlが作成されます。
+
+```
+pyxel app2html PyBulletDragon.pyxapp
+```
+
 ## プロジェクト構成
 
 - `game.py`: ゲームのメインスクリプト
