@@ -9,12 +9,15 @@ import math
 import time
 
 # プレイヤー関連の定数
-PLAYER_SPEED = 3  # プレイヤーの移動速度
+PLAYER_SPEED = 5  # プレイヤーの移動速度（3から5に増加）
 PLAYER_BULLET_SPEED = 6  # プレイヤーの弾の速度
 MAX_POWER_LEVEL = 5  # 最大パワーレベル
 INVINCIBLE_TIME = 60  # 無敵時間（フレーム数）
 HITBOX_RADIUS = 2  # 当たり判定の半径
 DOUBLE_TAP_TIME = 0.3  # ダブルタップの時間閾値（秒）
+CONTROL_AREA_HEIGHT = 200  # 操作領域の高さ（画面下部から）
+JOYSTICK_MAX_SPEED_FACTOR = 1.8  # ジョイスティック最大速度倍率（2.5から1.8に減少）
+JOYSTICK_SENSITIVITY = 25  # ジョイスティック感度（小さいほど敏感）
 
 class Bullet:
     """
@@ -95,6 +98,14 @@ class Player:
         self.touch_start_time = 0
         self.last_tap_time = 0
         self.is_touching = False
+        self.touch_control_mode = "direct"  # 操作モード: "direct" または "joystick"
+        self.target_x = self.x  # 移動先のX座標
+        self.target_y = self.y  # 移動先のY座標
+        self.joystick_center_x = 0  # 仮想ジョイスティックの中心X
+        self.joystick_center_y = 0  # 仮想ジョイスティックの中心Y
+        self.move_smoothness = 0.4  # 移動の滑らかさ（値が大きいほど素早く移動）
+        self.joystick_active = False  # ジョイスティックが有効かどうか
+        self.joystick_duration = 0  # ジョイスティック操作の持続時間
     
     def update(self):
         """
@@ -132,15 +143,41 @@ class Player:
         # 現在の移動速度を決定
         current_speed = self.focus_speed if self.is_focusing else PLAYER_SPEED
         
-        # プレイヤーの移動
+        # 移動方向のフラグ
+        move_horizontal = False
+        move_vertical = False
+        dx = 0
+        dy = 0
+        
+        # 水平方向の移動
         if pyxel.btn(pyxel.KEY_LEFT) and self.x > 0:
-            self.x -= current_speed
+            dx -= current_speed
+            move_horizontal = True
         if pyxel.btn(pyxel.KEY_RIGHT) and self.x < pyxel.width - self.width:
-            self.x += current_speed
+            dx += current_speed
+            move_horizontal = True
+            
+        # 垂直方向の移動
         if pyxel.btn(pyxel.KEY_UP) and self.y > 0:
-            self.y -= current_speed
+            dy -= current_speed
+            move_vertical = True
         if pyxel.btn(pyxel.KEY_DOWN) and self.y < pyxel.height - self.height:
-            self.y += current_speed
+            dy += current_speed
+            move_vertical = True
+            
+        # 斜め移動時は速度を調整（ノーマライズ）
+        if move_horizontal and move_vertical:
+            diagonal_factor = 0.8  # 斜め移動時の速度調整係数（0.707より大きめに設定）
+            dx *= diagonal_factor
+            dy *= diagonal_factor
+            
+        # 移動を適用
+        self.x += dx
+        self.y += dy
+        
+        # 目標位置も更新（タッチ操作との連携のため）
+        self.target_x = self.x
+        self.target_y = self.y
         
         # 弾の発射
         if pyxel.btn(pyxel.KEY_Z) and self.shot_cooldown == 0:
@@ -161,6 +198,7 @@ class Player:
             self.touch_start_y = pyxel.mouse_y
             self.touch_start_time = time.time()
             self.is_touching = True
+            self.joystick_duration = 0
             
             # ダブルタップ検出
             current_time = time.time()
@@ -168,10 +206,22 @@ class Player:
                 self.use_bomb()
             self.last_tap_time = current_time
             
-            # タップでショット
-            if self.shot_cooldown == 0:
-                self.shoot()
-                self.shot_cooldown = 5
+            # 画面上部のタップはショットのみ、下部はジョイスティック開始
+            if pyxel.mouse_y < pyxel.height - CONTROL_AREA_HEIGHT:
+                # 上部タップ: ショット＋移動なし
+                if self.shot_cooldown == 0:
+                    self.shoot()
+                    self.shot_cooldown = 5
+            else:
+                # 下部タップ: 仮想ジョイスティック開始位置を設定
+                self.joystick_center_x = pyxel.mouse_x
+                self.joystick_center_y = pyxel.mouse_y
+                self.joystick_active = True
+                
+                # ショットも同時に発射
+                if self.shot_cooldown == 0:
+                    self.shoot()
+                    self.shot_cooldown = 5
         
         # タッチ中
         if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
@@ -184,36 +234,69 @@ class Player:
                 self.shoot()
                 self.shot_cooldown = 5
             
-            # ドラッグで移動
+            # 移動制御
             if self.is_touching:
-                dx = pyxel.mouse_x - self.touch_start_x
-                dy = pyxel.mouse_y - self.touch_start_y
-                
-                # 移動速度を決定
+                # 現在の移動速度を決定
                 current_speed = self.focus_speed if self.is_focusing else PLAYER_SPEED
                 
-                # スワイプ方向に移動
-                if abs(dx) > 5 or abs(dy) > 5:  # 少し動かしたらスワイプと判断
-                    # X軸方向の移動
-                    if dx < 0 and self.x > 0:
-                        self.x -= min(abs(dx) * 0.1, current_speed)
-                    elif dx > 0 and self.x < pyxel.width - self.width:
-                        self.x += min(dx * 0.1, current_speed)
+                if self.joystick_active:
+                    # ジョイスティック操作の持続時間を増加（加速のため）
+                    self.joystick_duration += 1
                     
-                    # Y軸方向の移動
-                    if dy < 0 and self.y > 0:
-                        self.y -= min(abs(dy) * 0.1, current_speed)
-                    elif dy > 0 and self.y < pyxel.height - self.height:
-                        self.y += min(dy * 0.1, current_speed)
+                    # 加速係数を計算（最大1.5倍までの加速）（2.0から1.5に減少）
+                    acceleration = min(1.0 + self.joystick_duration / 90, 1.5)
                     
-                    # 新しい位置を開始位置として更新
-                    self.touch_start_x = pyxel.mouse_x
-                    self.touch_start_y = pyxel.mouse_y
+                    # ジョイスティックモード
+                    dx = pyxel.mouse_x - self.joystick_center_x
+                    dy = pyxel.mouse_y - self.joystick_center_y
+                    
+                    # ジョイスティックの距離に応じて速度を調整（最大速度を制限）
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    
+                    if distance > 2:  # 入力感度の向上（5→2）
+                        # 移動方向と速度を計算
+                        normalized_dx = dx / distance
+                        normalized_dy = dy / distance
+                        
+                        # 距離に応じた速度調整
+                        # - 感度を向上（JOYSTICK_SENSITIVITY）
+                        # - 最大速度倍率を向上（JOYSTICK_MAX_SPEED_FACTOR）
+                        # - 持続時間による加速（acceleration）
+                        speed_factor = min(distance / JOYSTICK_SENSITIVITY * JOYSTICK_MAX_SPEED_FACTOR, JOYSTICK_MAX_SPEED_FACTOR) * acceleration
+                        move_speed = current_speed * speed_factor
+                        
+                        # 直接位置を更新（より即応性を高める）
+                        self.x += normalized_dx * move_speed
+                        self.y += normalized_dy * move_speed
+                        
+                        # 画面外に出ないように制限
+                        self.x = max(0, min(self.x, pyxel.width - self.width))
+                        self.y = max(0, min(self.y, pyxel.height - self.height))
+                        
+                        # 目標位置も更新
+                        self.target_x = self.x
+                        self.target_y = self.y
+                else:
+                    # 画面上部のタッチなら直接移動（ダイレクトタッチモード）
+                    if pyxel.mouse_y < pyxel.height - CONTROL_AREA_HEIGHT:
+                        # タップした位置に直接移動（中心位置を合わせる）
+                        self.target_x = pyxel.mouse_x - self.width / 2
+                        self.target_y = pyxel.mouse_y - self.height / 2
+                        
+                        # 画面外に出ないように制限
+                        self.target_x = max(0, min(self.target_x, pyxel.width - self.width))
+                        self.target_y = max(0, min(self.target_y, pyxel.height - self.height))
+                        
+                        # 直接位置を更新（より即応性を高める）
+                        self.x = self.target_x
+                        self.y = self.target_y
         
         # タッチ終了
         if pyxel.btnr(pyxel.MOUSE_BUTTON_LEFT):
             self.is_touching = False
             self.is_focusing = False
+            self.joystick_active = False
+            self.joystick_duration = 0
     
     def shoot(self):
         """
@@ -295,6 +378,39 @@ class Player:
         # 弾の描画
         for bullet in self.bullets:
             bullet.draw()
+            
+        # 仮想ジョイスティックの描画（タッチ中のみ）
+        if self.joystick_active and self.is_touching:
+            # ジョイスティックの基点
+            pyxel.circb(self.joystick_center_x, self.joystick_center_y, 20, 13)
+            
+            # 現在の入力位置
+            dx = pyxel.mouse_x - self.joystick_center_x
+            dy = pyxel.mouse_y - self.joystick_center_y
+            distance = math.sqrt(dx*dx + dy*dy)
+            
+            # 加速状態のフィードバック
+            acceleration_color = 7  # 通常は白
+            if self.joystick_duration > 45:  # 30から45に増加（加速までの時間延長）
+                # 加速中は明るい色に
+                acceleration_color = 10 if pyxel.frame_count % 6 < 3 else 11
+            
+            if distance > 0:
+                # 最大半径を超えないように
+                max_radius = 20
+                display_x = self.joystick_center_x + dx * min(distance, max_radius) / distance
+                display_y = self.joystick_center_y + dy * min(distance, max_radius) / distance
+                
+                # 入力スティック
+                pyxel.circ(display_x, display_y, 5, acceleration_color)
+                pyxel.line(self.joystick_center_x, self.joystick_center_y, display_x, display_y, acceleration_color)
+                
+                # 感度と速度をフィードバック
+                speed_factor = min(distance / JOYSTICK_SENSITIVITY * JOYSTICK_MAX_SPEED_FACTOR, JOYSTICK_MAX_SPEED_FACTOR)
+                speed_radius = 5 + speed_factor * 3  # 速度に応じてサイズ変化
+                if speed_factor > 1.3:  # 1.5から1.3に減少（エフェクト表示閾値を下げる）
+                    # 高速時は追加エフェクト
+                    pyxel.circb(display_x, display_y, speed_radius, acceleration_color)
     
     def get_hit(self):
         """
