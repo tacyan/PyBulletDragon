@@ -16,6 +16,13 @@ def check_collision(obj1, obj2):
     @param {object} obj2 - 2つ目のオブジェクト
     @returns {boolean} - 衝突していればTrue
     """
+    # PowerUpクラスとPlayerクラスの判定（特別処理）
+    if hasattr(obj1, '__class__') and hasattr(obj2, '__class__'):
+        if obj1.__class__.__name__ == 'PowerUp' and obj2.__class__.__name__ == 'Player':
+            return check_rect_collision(obj1, obj2)
+        elif obj1.__class__.__name__ == 'Player' and obj2.__class__.__name__ == 'PowerUp':
+            return check_rect_collision(obj1, obj2)
+    
     # ボスの弾とプレイヤーの判定
     if hasattr(obj1, 'hitbox_radius') and hasattr(obj2, 'hitbox_radius'):
         # 両方が円形当たり判定を持つ場合（弾とプレイヤーなど）

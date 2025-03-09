@@ -6,6 +6,7 @@
 
 import pyxel
 import math
+import time
 
 # プレイヤー関連の定数
 PLAYER_SPEED = 3  # プレイヤーの移動速度
@@ -13,6 +14,7 @@ PLAYER_BULLET_SPEED = 6  # プレイヤーの弾の速度
 MAX_POWER_LEVEL = 5  # 最大パワーレベル
 INVINCIBLE_TIME = 60  # 無敵時間（フレーム数）
 HITBOX_RADIUS = 2  # 当たり判定の半径
+DOUBLE_TAP_TIME = 0.3  # ダブルタップの時間閾値（秒）
 
 class Bullet:
     """
@@ -86,10 +88,43 @@ class Player:
         # 移動関連
         self.is_focusing = False  # 低速移動（集中モード）フラグ
         self.focus_speed = PLAYER_SPEED / 2  # 低速移動時の速度
+        
+        # タッチ操作関連
+        self.touch_start_x = 0
+        self.touch_start_y = 0
+        self.touch_start_time = 0
+        self.last_tap_time = 0
+        self.is_touching = False
     
     def update(self):
         """
         プレイヤーの状態を更新します。
+        """
+        # キーボード操作
+        self.handle_keyboard_input()
+        
+        # タッチ操作
+        self.handle_touch_input()
+        
+        # ショットクールダウンを減少
+        if self.shot_cooldown > 0:
+            self.shot_cooldown -= 1
+        
+        # 弾の更新
+        for bullet in self.bullets[:]:
+            if bullet.update():
+                self.bullets.remove(bullet)
+        
+        # オプションの位置更新
+        self.update_options()
+        
+        # 無敵時間の更新
+        if self.invincible > 0:
+            self.invincible -= 1
+    
+    def handle_keyboard_input(self):
+        """
+        キーボード入力を処理します。
         """
         # 低速移動モードの切り替え
         self.is_focusing = pyxel.btn(pyxel.KEY_SHIFT)
@@ -107,10 +142,6 @@ class Player:
         if pyxel.btn(pyxel.KEY_DOWN) and self.y < pyxel.height - self.height:
             self.y += current_speed
         
-        # ショットクールダウンを減少
-        if self.shot_cooldown > 0:
-            self.shot_cooldown -= 1
-        
         # 弾の発射
         if pyxel.btn(pyxel.KEY_Z) and self.shot_cooldown == 0:
             self.shoot()
@@ -119,18 +150,70 @@ class Player:
         # ボムの使用
         if pyxel.btnp(pyxel.KEY_X) and self.bomb > 0:
             self.use_bomb()
+    
+    def handle_touch_input(self):
+        """
+        タッチ入力を処理します。
+        """
+        # タッチ開始
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            self.touch_start_x = pyxel.mouse_x
+            self.touch_start_y = pyxel.mouse_y
+            self.touch_start_time = time.time()
+            self.is_touching = True
+            
+            # ダブルタップ検出
+            current_time = time.time()
+            if current_time - self.last_tap_time < DOUBLE_TAP_TIME and self.bomb > 0:
+                self.use_bomb()
+            self.last_tap_time = current_time
+            
+            # タップでショット
+            if self.shot_cooldown == 0:
+                self.shoot()
+                self.shot_cooldown = 5
         
-        # 弾の更新
-        for bullet in self.bullets[:]:
-            if bullet.update():
-                self.bullets.remove(bullet)
+        # タッチ中
+        if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+            # 長押しで低速移動
+            if time.time() - self.touch_start_time > 0.2:
+                self.is_focusing = True
+            
+            # タッチ中は定期的にショット
+            if self.shot_cooldown == 0:
+                self.shoot()
+                self.shot_cooldown = 5
+            
+            # ドラッグで移動
+            if self.is_touching:
+                dx = pyxel.mouse_x - self.touch_start_x
+                dy = pyxel.mouse_y - self.touch_start_y
+                
+                # 移動速度を決定
+                current_speed = self.focus_speed if self.is_focusing else PLAYER_SPEED
+                
+                # スワイプ方向に移動
+                if abs(dx) > 5 or abs(dy) > 5:  # 少し動かしたらスワイプと判断
+                    # X軸方向の移動
+                    if dx < 0 and self.x > 0:
+                        self.x -= min(abs(dx) * 0.1, current_speed)
+                    elif dx > 0 and self.x < pyxel.width - self.width:
+                        self.x += min(dx * 0.1, current_speed)
+                    
+                    # Y軸方向の移動
+                    if dy < 0 and self.y > 0:
+                        self.y -= min(abs(dy) * 0.1, current_speed)
+                    elif dy > 0 and self.y < pyxel.height - self.height:
+                        self.y += min(dy * 0.1, current_speed)
+                    
+                    # 新しい位置を開始位置として更新
+                    self.touch_start_x = pyxel.mouse_x
+                    self.touch_start_y = pyxel.mouse_y
         
-        # オプションの位置更新
-        self.update_options()
-        
-        # 無敵時間の更新
-        if self.invincible > 0:
-            self.invincible -= 1
+        # タッチ終了
+        if pyxel.btnr(pyxel.MOUSE_BUTTON_LEFT):
+            self.is_touching = False
+            self.is_focusing = False
     
     def shoot(self):
         """

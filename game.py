@@ -87,14 +87,15 @@ class Game:
         elif self.game_state == "playing":
             self.update_playing()
         elif self.game_state == "gameover" or self.game_state == "cleared":
-            if pyxel.btnp(pyxel.KEY_R):
+            if pyxel.btnp(pyxel.KEY_R) or pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 self.reset_game()
 
     def update_title(self):
         """
         タイトル画面の更新処理を行います。
         """
-        if pyxel.btnp(pyxel.KEY_Z):
+        # Zキーまたは画面タップでゲーム開始
+        if pyxel.btnp(pyxel.KEY_Z) or pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             self.game_state = "playing"
 
     def update_playing(self):
@@ -235,20 +236,22 @@ class Game:
         # タイトルテキスト
         pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 3, "東方風弾幕ゲーム", 7)
         
-        # 点滅するZキー説明（より目立つように）
+        # 点滅する指示テキスト（Zキーorタップ）
         if pyxel.frame_count % 30 < 15:
             # 背景を追加して目立たせる
-            pyxel.rectb(SCREEN_WIDTH // 2 - 45, SCREEN_HEIGHT // 2 - 5, 90, 15, 11)  # 紫色の枠
-            pyxel.text(SCREEN_WIDTH // 2 - 40, SCREEN_HEIGHT // 2, "Zキーでスタート", 10)  # 青色のテキスト
+            pyxel.rectb(SCREEN_WIDTH // 2 - 80, SCREEN_HEIGHT // 2 - 5, 160, 15, 11)  # 紫色の枠
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, "画面タップまたはZキーでスタート", 10)  # 青色のテキスト
         else:
-            pyxel.rectb(SCREEN_WIDTH // 2 - 45, SCREEN_HEIGHT // 2 - 5, 90, 15, 7)  # 白色の枠
-            pyxel.text(SCREEN_WIDTH // 2 - 40, SCREEN_HEIGHT // 2, "Zキーでスタート", 7)  # 白色のテキスト
+            pyxel.rectb(SCREEN_WIDTH // 2 - 80, SCREEN_HEIGHT // 2 - 5, 160, 15, 7)  # 白色の枠
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, "画面タップまたはZキーでスタート", 7)  # 白色のテキスト
         
         # 操作説明
-        pyxel.text(10, SCREEN_HEIGHT - 50, "操作方法:", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 40, "矢印キー: 移動", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 30, "Zキー: ショット", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 20, "Xキー: ボム使用", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 70, "操作方法:", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 60, "矢印キー/スワイプ: 移動", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 50, "Zキー/画面タップ: ショット", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 40, "Xキー/ダブルタップ: ボム使用", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 30, "長押し: 低速移動", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 20, "Rキー: リスタート", 7)
         pyxel.text(10, SCREEN_HEIGHT - 10, "Qキー: 終了", 7)
 
     def draw_playing(self):
@@ -322,9 +325,9 @@ class Game:
         
         # 再挑戦メッセージ
         if pyxel.frame_count % 30 < 15:
-            pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 + 40, "Rキーでリスタート", 10)
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 40, "タップまたはRキーでリスタート", 10)
         else:
-            pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 + 40, "Rキーでリスタート", 7)
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 40, "タップまたはRキーでリスタート", 7)
 
     def draw_cleared(self):
         """
@@ -360,9 +363,9 @@ class Game:
         
         # 再挑戦メッセージ
         if pyxel.frame_count % 30 < 15:
-            pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 + 45, "Rキーでリスタート", 11)
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 45, "タップまたはRキーでリスタート", 11)
         else:
-            pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 + 45, "Rキーでリスタート", 7)
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 45, "タップまたはRキーでリスタート", 7)
 
 if __name__ == "__main__":
     Game() 
