@@ -226,97 +226,6 @@ class Game:
             self.draw_playing()
             self.draw_cleared()
 
-    def draw_title(self):
-        """
-        タイトル画面を描画します。
-        """
-        # 背景の星
-        self.draw_stars()
-        
-        # タイトルテキスト
-        pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 3, "東方風弾幕ゲーム", 7)
-        
-        # 点滅する指示テキスト（Zキーorタップ）
-        if pyxel.frame_count % 30 < 15:
-            # 背景を追加して目立たせる
-            pyxel.rectb(SCREEN_WIDTH // 2 - 80, SCREEN_HEIGHT // 2 - 5, 160, 15, 11)  # 紫色の枠
-            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, "画面タップまたはZキーでスタート", 10)  # 青色のテキスト
-        else:
-            pyxel.rectb(SCREEN_WIDTH // 2 - 80, SCREEN_HEIGHT // 2 - 5, 160, 15, 7)  # 白色の枠
-            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, "画面タップまたはZキーでスタート", 7)  # 白色のテキスト
-        
-        # 操作説明
-        pyxel.text(10, SCREEN_HEIGHT - 120, "操作方法:", 7)
-        
-        # キーボード操作
-        pyxel.text(10, SCREEN_HEIGHT - 110, "【キーボード】", 6)
-        pyxel.text(10, SCREEN_HEIGHT - 100, "矢印キー: 移動", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 90, "Zキー: ショット", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 80, "Xキー: ボム使用", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 70, "Rキー: リスタート", 7)
-        pyxel.text(10, SCREEN_HEIGHT - 60, "Qキー: 終了", 7)
-        
-        # タッチ操作
-        pyxel.text(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 110, "【タッチ操作】", 6)
-        pyxel.text(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100, "画面上部: タップで直接移動", 7)
-        pyxel.text(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 90, "画面下部: 高速ジョイスティック", 11)
-        pyxel.text(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 80, "  • 長押しで徐々に加速", 10)
-        pyxel.text(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 70, "  • 大きく動かすと速度アップ", 10)
-        pyxel.text(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 60, "ダブルタップ: ボム使用", 7)
-
-    def draw_playing(self):
-        """
-        ゲームプレイ中の描画を行います。
-        """
-        # 背景の星
-        self.draw_stars()
-            
-        # ゲームオブジェクトの描画
-        for obstacle in self.obstacles:
-            obstacle.draw()
-            
-        for power_up in self.power_ups:
-            power_up.draw()
-            
-        for effect in self.effects:
-            effect.draw()
-            
-        self.boss.draw()
-        self.player.draw()
-        
-        # 操作ガイド領域の描画（プレイ開始後5秒間のみ表示）
-        if self.frame_counter < 300:  # 5秒 = 60フレーム × 5
-            # 操作領域の境界線
-            pyxel.line(0, pyxel.height - 200, pyxel.width, pyxel.height - 200, 5)
-            
-            # 操作ガイド（透明度を徐々に下げる）
-            if self.frame_counter < 150:  # 最初の2.5秒は完全表示
-                alpha = 255
-            else:  # 残りの2.5秒でフェードアウト
-                alpha = 255 * (1 - (self.frame_counter - 150) / 150)
-                
-            alpha_col = int(alpha / 255 * 7)  # 色の透明度を0-7の範囲に変換
-            if alpha_col > 0:
-                # 上部エリアのガイド
-                pyxel.text(5, pyxel.height - 230, "タップで直接移動", alpha_col)
-                
-                # 下部エリアのガイド
-                text_col = min(alpha_col + 3, 7)  # 少し目立つ色に
-                pyxel.text(5, pyxel.height - 190, "高速ジョイスティック操作エリア", text_col)
-                
-                # 新操作方法の説明
-                if self.frame_counter % 60 < 30:  # 点滅表示
-                    pyxel.text(5, pyxel.height - 180, "• 長押しで徐々に加速", 10)
-                    pyxel.text(5, pyxel.height - 170, "• 大きく動かすと速度アップ", 10)
-                    pyxel.text(5, pyxel.height - 160, "• ダブルタップでボム使用", 10)
-                else:
-                    pyxel.text(5, pyxel.height - 180, "• 長押しで徐々に加速", alpha_col)
-                    pyxel.text(5, pyxel.height - 170, "• 大きく動かすと速度アップ", alpha_col)
-                    pyxel.text(5, pyxel.height - 160, "• ダブルタップでボム使用", alpha_col)
-        
-        # UI表示
-        self.draw_ui()
-
     def draw_stars(self):
         """
         背景の星を描画します。
@@ -406,6 +315,59 @@ class Game:
             pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 45, "タップまたはRキーでリスタート", 11)
         else:
             pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 45, "タップまたはRキーでリスタート", 7)
+
+    def draw_title(self):
+        """
+        タイトル画面を描画します。
+        """
+        # 背景の星
+        self.draw_stars()
+        
+        # タイトルテキスト
+        pyxel.text(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 3, "東方風弾幕ゲーム", 7)
+        
+        # 点滅する指示テキスト（Zキーorタップ）
+        if pyxel.frame_count % 30 < 15:
+            # 背景を追加して目立たせる
+            pyxel.rectb(SCREEN_WIDTH // 2 - 80, SCREEN_HEIGHT // 2 - 5, 160, 15, 11)  # 紫色の枠
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, "画面タップまたはZキーでスタート", 10)  # 青色のテキスト
+        else:
+            pyxel.rectb(SCREEN_WIDTH // 2 - 80, SCREEN_HEIGHT // 2 - 5, 160, 15, 7)  # 白色の枠
+            pyxel.text(SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2, "画面タップまたはZキーでスタート", 7)  # 白色のテキスト
+        
+        # 操作説明
+        pyxel.text(10, SCREEN_HEIGHT - 120, "操作方法:", 7)
+        
+        # キーボード操作
+        pyxel.text(10, SCREEN_HEIGHT - 110, "【キーボード】", 6)
+        pyxel.text(10, SCREEN_HEIGHT - 100, "矢印キー: 移動", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 90, "Zキー: ショット", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 80, "Xキー: ボム使用", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 70, "Rキー: リスタート", 7)
+        pyxel.text(10, SCREEN_HEIGHT - 60, "Qキー: 終了", 7)
+
+    def draw_playing(self):
+        """
+        ゲームプレイ中の描画を行います。
+        """
+        # 背景の星
+        self.draw_stars()
+            
+        # ゲームオブジェクトの描画
+        for obstacle in self.obstacles:
+            obstacle.draw()
+            
+        for power_up in self.power_ups:
+            power_up.draw()
+            
+        for effect in self.effects:
+            effect.draw()
+            
+        self.boss.draw()
+        self.player.draw()
+        
+        # UIの描画
+        self.draw_ui()
 
 if __name__ == "__main__":
     Game() 

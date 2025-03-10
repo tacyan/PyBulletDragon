@@ -7,6 +7,8 @@
 import pyxel
 import math
 import time
+import os
+from utils.image_loader import DEBUG
 
 # プレイヤー関連の定数
 PLAYER_SPEED = 5  # プレイヤーの移動速度（3から5に増加）
@@ -39,10 +41,11 @@ class Bullet:
         self.y = y
         self.vx = math.cos(angle) * speed
         self.vy = -math.sin(angle) * speed  # 画面座標系では上がマイナス方向
-        self.width = 2
-        self.height = 6
+        self.width = 5  # ビームの幅（5ピクセル）
+        self.height = 6  # ビームの高さ（6ピクセル）
         self.power = power
         self.is_active = True
+        self.animation_frame = 0  # アニメーションフレーム
     
     def update(self):
         """
@@ -52,6 +55,9 @@ class Bullet:
         """
         self.x += self.vx
         self.y += self.vy
+        
+        # アニメーションフレームの更新
+        self.animation_frame = (self.animation_frame + 1) % 4
         
         # 画面外に出たら削除フラグを立てる
         if (self.x < -self.width or self.x > pyxel.width + self.width or
@@ -63,7 +69,13 @@ class Bullet:
         """
         弾を描画します。
         """
-        pyxel.rect(self.x - self.width/2, self.y, self.width, self.height, 7)
+        # スペースシャトルの弾を描画
+        pyxel.blt(self.x - 2, self.y - 3, 0, 32, 0, 5, 6, 0)
+        
+        # 発射エフェクト（オプション）
+        if self.animation_frame < 2:
+            # 明るいエフェクト（点滅）
+            pyxel.pset(self.x, self.y + self.height - 1, 7)  # 白色の点
 
 class Player:
     """
@@ -75,10 +87,14 @@ class Player:
         """
         プレイヤーを初期化します。
         """
-        self.x = pyxel.width // 2
-        self.y = pyxel.height - 30
-        self.width = 8
-        self.height = 8
+        # プレイヤー画像サイズの検出
+        self._detect_player_image_size()
+        
+        # プレイヤーの位置設定
+        self.x = pyxel.width // 2 - self.width // 2  # 中心に配置するため調整
+        self.y = pyxel.height - 40 - self.height     # 少し高めの位置に配置
+        
+        # ゲームプレイ関連の初期化
         self.bullets = []
         self.power = 1  # プレイヤーのパワーレベル
         self.lives = 3  # 残機数
@@ -106,6 +122,112 @@ class Player:
         self.move_smoothness = 0.4  # 移動の滑らかさ（値が大きいほど素早く移動）
         self.joystick_active = False  # ジョイスティックが有効かどうか
         self.joystick_duration = 0  # ジョイスティック操作の持続時間
+        
+        # 画像アニメーション関連
+        self.animation_frame = 0  # アニメーションフレーム
+        self.frame_offset = self.height  # 2枚目のフレームのY位置オフセット
+        
+        if DEBUG:
+            print(f"プレイヤー初期化完了: サイズ={self.width}x{self.height}, 位置=({self.x}, {self.y})")
+    
+    def _detect_player_image_size(self):
+        """
+        プレイヤー画像のサイズを検出します。
+        画像が見つからない場合はデフォルトサイズを使用します。
+        """
+        try:
+            # PILを使って画像サイズを直接取得（最も信頼性が高い方法）
+            img_path = os.path.join("resources", "player.png")
+            if os.path.exists(img_path):
+                try:
+                    from PIL import Image
+                    img = Image.open(img_path)
+                    orig_width, orig_height = img.size
+                    
+                    # リサイズが必要かチェック
+                    if orig_width > 64 or orig_height > 64:
+                        ratio = min(64 / orig_width, 64 / orig_height)
+                        width = max(16, int(orig_width * ratio))  # 最小サイズを16に制限
+                        height = max(16, int(orig_height * ratio))
+                    else:
+                        width = orig_width
+                        height = orig_height
+                    
+                    if DEBUG:
+                        print(f"PIL から直接サイズを取得: 元のサイズ={orig_width}x{orig_height}, 使用サイズ={width}x{height}")
+                    
+                    # 検出されたサイズを設定
+                    self.width = width
+                    self.height = height
+                    self.frame_offset = height  # 2フレーム目のオフセット
+                    
+                    return
+                except Exception as e:
+                    if DEBUG:
+                        print(f"PIL画像サイズ取得エラー: {e}")
+                    # PILでエラーが発生した場合は後続のピクセルスキャン方法を試みる
+            
+            # イメージバンク0の内容をスキャンして画像サイズを検出
+            max_x = 0
+            max_y = 0
+            min_x = 999
+            min_y = 999
+            
+            # 非透明ピクセルの範囲を検出（より正確な方法）
+            non_transparent_pixels = 0
+            for y in range(64):
+                for x in range(64):
+                    if pyxel.images[0].pget(x, y) != 0:  # 非透明ピクセルを見つけた
+                        non_transparent_pixels += 1
+                        max_x = max(max_x, x)
+                        max_y = max(max_y, y)
+                        min_x = min(min_x, x)
+                        min_y = min(min_y, y)
+            
+            if DEBUG:
+                print(f"ピクセルスキャン: 非透明ピクセル数={non_transparent_pixels}")
+                print(f"範囲: ({min_x},{min_y})-({max_x},{max_y})")
+            
+            # 実際の幅と高さを計算
+            if non_transparent_pixels > 0 and max_x >= min_x and max_y >= min_y:
+                width = max_x - min_x + 1
+                height = max_y - min_y + 1
+                
+                # 最小サイズを確保
+                width = max(16, width)
+                height = max(16, height)
+                
+                if DEBUG:
+                    print(f"検出されたプレイヤー画像サイズ: {width}x{height}")
+                
+                # デフォルトより大きいサイズの場合のみ採用
+                if width > 8 and height > 8:
+                    self.width = width
+                    self.height = height
+                    self.frame_offset = height
+                    return
+            
+            # 以上の方法で失敗した場合はデフォルトサイズを使用
+            self.width = 32  # デフォルト幅
+            self.height = 32  # デフォルト高さ
+            self.frame_offset = self.height
+            
+            if DEBUG:
+                print(f"デフォルトサイズを使用: {self.width}x{self.height}")
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"画像サイズ検出中にエラーが発生しました: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # エラー時はデフォルトサイズを使用
+            self.width = 32  # デフォルト幅を大きめに
+            self.height = 32  # デフォルト高さを大きめに
+            self.frame_offset = self.height
+            
+            if DEBUG:
+                print(f"エラー時のデフォルトサイズを使用: {self.width}x{self.height}")
     
     def update(self):
         """
@@ -120,6 +242,11 @@ class Player:
         # ショットクールダウンを減少
         if self.shot_cooldown > 0:
             self.shot_cooldown -= 1
+            
+        # 連射機能（Zキーを押している間は常に発射）
+        if pyxel.btn(pyxel.KEY_Z) and self.shot_cooldown == 0:
+            self.shoot()
+            self.shot_cooldown = 2  # 連射速度をさらに上げる（3から2に変更）
         
         # 弾の更新
         for bullet in self.bullets[:]:
@@ -179,11 +306,6 @@ class Player:
         self.target_x = self.x
         self.target_y = self.y
         
-        # 弾の発射
-        if pyxel.btn(pyxel.KEY_Z) and self.shot_cooldown == 0:
-            self.shoot()
-            self.shot_cooldown = 5  # 連射速度の調整（値が小さいほど速い）
-        
         # ボムの使用
         if pyxel.btnp(pyxel.KEY_X) and self.bomb > 0:
             self.use_bomb()
@@ -211,7 +333,7 @@ class Player:
                 # 上部タップ: ショット＋移動なし
                 if self.shot_cooldown == 0:
                     self.shoot()
-                    self.shot_cooldown = 5
+                    self.shot_cooldown = 2  # 連射速度をさらに上げる
             else:
                 # 下部タップ: 仮想ジョイスティック開始位置を設定
                 self.joystick_center_x = pyxel.mouse_x
@@ -221,7 +343,7 @@ class Player:
                 # ショットも同時に発射
                 if self.shot_cooldown == 0:
                     self.shoot()
-                    self.shot_cooldown = 5
+                    self.shot_cooldown = 2  # 連射速度をさらに上げる
         
         # タッチ中
         if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
@@ -232,7 +354,7 @@ class Player:
             # タッチ中は定期的にショット
             if self.shot_cooldown == 0:
                 self.shoot()
-                self.shot_cooldown = 5
+                self.shot_cooldown = 2  # 連射速度をさらに上げる
             
             # 移動制御
             if self.is_touching:
@@ -303,35 +425,51 @@ class Player:
         弾を発射します。パワーレベルに応じて弾の数や配置が変化します。
         """
         center_x = self.x + self.width / 2
+        top_y = self.y  # プレイヤーの先端位置
         
         # パワーレベルに応じて弾の数や配置を変更
         if self.power == 1:
-            self.bullets.append(Bullet(center_x, self.y))
+            # 単発（中央）
+            self.bullets.append(Bullet(center_x - 2, top_y))
         elif self.power == 2:
-            self.bullets.append(Bullet(center_x - 3, self.y))
-            self.bullets.append(Bullet(center_x + 3, self.y))
+            # 2連射（左右）
+            left_x = center_x - self.width / 4
+            right_x = center_x + self.width / 4
+            self.bullets.append(Bullet(left_x, top_y + 4))
+            self.bullets.append(Bullet(right_x, top_y + 4))
         elif self.power == 3:
-            self.bullets.append(Bullet(center_x, self.y))
-            self.bullets.append(Bullet(center_x - 4, self.y + 2))
-            self.bullets.append(Bullet(center_x + 4, self.y + 2))
+            # 3連射（中央と左右）
+            left_x = center_x - self.width / 3
+            right_x = center_x + self.width / 3
+            self.bullets.append(Bullet(center_x - 2, top_y))
+            self.bullets.append(Bullet(left_x, top_y + 4))
+            self.bullets.append(Bullet(right_x, top_y + 4))
         elif self.power == 4:
-            self.bullets.append(Bullet(center_x, self.y))
-            self.bullets.append(Bullet(center_x - 4, self.y + 2))
-            self.bullets.append(Bullet(center_x + 4, self.y + 2))
-            # サイド弾（少し斜めに）
-            self.bullets.append(Bullet(center_x - 6, self.y + 4, math.pi/2 + 0.2))
-            self.bullets.append(Bullet(center_x + 6, self.y + 4, math.pi/2 - 0.2))
+            # 5連射（中央、左右、両側面）
+            left_x = center_x - self.width / 3
+            right_x = center_x + self.width / 3
+            self.bullets.append(Bullet(center_x - 2, top_y))
+            self.bullets.append(Bullet(left_x, top_y + 4))
+            self.bullets.append(Bullet(right_x, top_y + 4))
+            # 横方向の弾
+            self.bullets.append(Bullet(self.x - 3, self.y + self.height/2, math.pi/2 + 0.5))
+            self.bullets.append(Bullet(self.x + self.width, self.y + self.height/2, math.pi/2 - 0.5))
         elif self.power >= 5:
-            # 最大パワーレベル
-            self.bullets.append(Bullet(center_x, self.y))
-            self.bullets.append(Bullet(center_x - 4, self.y + 2))
-            self.bullets.append(Bullet(center_x + 4, self.y + 2))
-            # サイド弾（少し斜めに）
-            self.bullets.append(Bullet(center_x - 6, self.y + 4, math.pi/2 + 0.2))
-            self.bullets.append(Bullet(center_x + 6, self.y + 4, math.pi/2 - 0.2))
-            # 後方弾
-            self.bullets.append(Bullet(center_x - 8, self.y + 6, math.pi/2 + 0.4))
-            self.bullets.append(Bullet(center_x + 8, self.y + 6, math.pi/2 - 0.4))
+            # 7連射（最大パワー - 前方全域と斜め後方）
+            left_x = center_x - self.width / 3
+            right_x = center_x + self.width / 3
+            self.bullets.append(Bullet(center_x - 2, top_y - 4))
+            self.bullets.append(Bullet(left_x, top_y))
+            self.bullets.append(Bullet(right_x, top_y))
+            # 横方向の弾
+            self.bullets.append(Bullet(self.x - 3, self.y + self.height/2, math.pi/2 + 0.5))
+            self.bullets.append(Bullet(self.x + self.width, self.y + self.height/2, math.pi/2 - 0.5))
+            # 後方向き斜め弾
+            self.bullets.append(Bullet(self.x - 3, self.y + self.height*0.7, math.pi/2 + 0.8))
+            self.bullets.append(Bullet(self.x + self.width, self.y + self.height*0.7, math.pi/2 - 0.8))
+        
+        # ショット音を再生
+        pyxel.play(0, 0)
     
     def use_bomb(self):
         """
@@ -346,71 +484,135 @@ class Player:
         """
         オプション（サブウェポン）の位置を更新します。
         """
-        # パワーレベルに応じてオプションを更新
         self.options = []
         
         if self.power >= 3:
-            # レベル3以上でオプション追加
-            self.options.append((self.x - 12, self.y + 8))
+            # レベル3以上でオプション追加 - 左ウィング
+            left_x = self.x - self.width * 0.2
+            left_y = self.y + self.height * 0.4
+            self.options.append((left_x, left_y))
             
         if self.power >= 5:
-            # レベル5でオプション追加
-            self.options.append((self.x + 12, self.y + 8))
+            # レベル5でオプション追加 - 右ウィング
+            right_x = self.x + self.width * 0.9
+            right_y = self.y + self.height * 0.4
+            self.options.append((right_x, right_y))
     
     def draw(self):
         """
         プレイヤーを描画します。
         """
+        # アニメーションフレームの更新
+        self.animation_frame = (pyxel.frame_count // 8) % 2
+        
         # 無敵時間中は点滅させる
         if self.invincible == 0 or pyxel.frame_count % 4 < 2:
-            # プレイヤー本体
-            pyxel.blt(self.x, self.y, 0, 0, 0, self.width, self.height, 0)
+            # プレイヤー本体を描画
+            y_offset = 0 if self.animation_frame == 0 else self.frame_offset
+            
+            if DEBUG and pyxel.frame_count % 60 == 0:
+                print(f"描画情報: フレーム={self.animation_frame}, オフセット={y_offset}, サイズ={self.width}x{self.height}")
+            
+            # リソースの検証（透明でないピクセルがあるか確認）
+            has_content = False
+            non_transparent_pixels = 0
+            
+            # 効率的に内容をチェック（サンプリング）
+            check_step = max(1, min(self.width, self.height) // 4)
+            for check_y in range(0, self.height, check_step):
+                for check_x in range(0, self.width, check_step):
+                    if pyxel.images[0].pget(check_x, check_y + y_offset) != 0:
+                        has_content = True
+                        non_transparent_pixels += 1
+            
+            if DEBUG and pyxel.frame_count % 60 == 0:
+                print(f"コンテンツチェック: 非透明ピクセル数={non_transparent_pixels}, 有効={has_content}")
+            
+            # PILから直接サイズを取得する代替手段（非常に小さいサイズの場合）
+            if self.width <= 8 or self.height <= 8:
+                try:
+                    img_path = os.path.join("resources", "player.png")
+                    if os.path.exists(img_path):
+                        from PIL import Image
+                        img = Image.open(img_path)
+                        pil_width, pil_height = img.size
+                        
+                        # 最大64x64に制限
+                        if pil_width > 64 or pil_height > 64:
+                            ratio = min(64 / pil_width, 64 / pil_height)
+                            pil_width = int(pil_width * ratio)
+                            pil_height = int(pil_height * ratio)
+                        
+                        # 大きすぎなければPILからのサイズを使用
+                        if pil_width > 8 and pil_height > 8:
+                            if DEBUG:
+                                print(f"小さすぎるサイズを検出: {self.width}x{self.height} → PILサイズ: {pil_width}x{pil_height}を使用")
+                            self.width = pil_width
+                            self.height = pil_height
+                            self.frame_offset = pil_height
+                except Exception as e:
+                    if DEBUG:
+                        print(f"PILサイズ取得エラー: {e}")
+            
+            # 内容が空でも強制的に表示する（デバッグ用）
+            display_anyway = True
+            
+            if has_content or display_anyway:
+                # プレイヤーのスプライトを描画
+                pyxel.blt(self.x, self.y, 0, 0, y_offset, self.width, self.height, 0)
+                
+                if DEBUG and pyxel.frame_count % 60 == 0:
+                    print(f"プレイヤースプライト描画: x={self.x}, y={self.y}, w={self.width}, h={self.height}, offset_y={y_offset}")
+            else:
+                # コンテンツが見つからない場合の対応（エラー時の表示）
+                if DEBUG and pyxel.frame_count % 60 == 0:
+                    print(f"警告: プレイヤースプライトにコンテンツがありません！ バンク0: (0,{y_offset})-({self.width},{y_offset+self.height})")
+                
+                # 代替表示（シンプルな四角形）
+                pyxel.rectb(self.x, self.y, self.width, self.height, 7)
+                pyxel.line(self.x, self.y, self.x + self.width - 1, self.y + self.height - 1, 7)
+                pyxel.line(self.x, self.y + self.height - 1, self.x + self.width - 1, self.y, 7)
+            
+            # エンジン推進エフェクト（下部）- 画像自体にエンジン炎が含まれているかも
+            engine_y = self.y + self.height
+            engine_center_x = self.x + self.width / 2
+            
+            # 追加のエンジンエフェクト（オプション）
+            if pyxel.frame_count % 8 < 4:
+                # 明るいエフェクト
+                pyxel.line(engine_center_x - 2, engine_y, 
+                          engine_center_x - 4, engine_y + 3, 7)
+                pyxel.line(engine_center_x + 2, engine_y, 
+                          engine_center_x + 4, engine_y + 3, 7)
+            else:
+                # 暗いエフェクト
+                pyxel.line(engine_center_x - 2, engine_y, 
+                          engine_center_x - 3, engine_y + 2, 10)
+                pyxel.line(engine_center_x + 2, engine_y, 
+                          engine_center_x + 3, engine_y + 2, 10)
             
             # 低速移動時の当たり判定表示
             if self.is_focusing:
-                pyxel.circ(self.x + self.width/2, self.y + self.height/2, 
-                          self.hitbox_radius, 8)
+                pyxel.circb(self.x + self.width/2, self.y + self.height/2, self.hitbox_radius, 7)
             
-            # オプションの描画
+            # オプションの描画（小型のサブウェポン）
             for opt_x, opt_y in self.options:
-                pyxel.blt(opt_x, opt_y, 0, 8, 0, 6, 6, 0)
+                # オプションのエンジン炎も同様にアニメーション
+                if pyxel.frame_count % 8 < 4:
+                    # 明るいエフェクト
+                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 1, opt_y + 7, 7)
+                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 3, opt_y + 7, 7)
+                else:
+                    # 暗いエフェクト
+                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 1, opt_y + 6, 10)
+                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 3, opt_y + 6, 10)
+                
+                # オプションを描画
+                pyxel.blt(opt_x, opt_y, 0, 8, 0, 5, 6, 0)
         
         # 弾の描画
         for bullet in self.bullets:
             bullet.draw()
-            
-        # 仮想ジョイスティックの描画（タッチ中のみ）
-        if self.joystick_active and self.is_touching:
-            # ジョイスティックの基点
-            pyxel.circb(self.joystick_center_x, self.joystick_center_y, 20, 13)
-            
-            # 現在の入力位置
-            dx = pyxel.mouse_x - self.joystick_center_x
-            dy = pyxel.mouse_y - self.joystick_center_y
-            distance = math.sqrt(dx*dx + dy*dy)
-            
-            # 加速状態のフィードバック
-            acceleration_color = 7  # 通常は白
-            if self.joystick_duration > 45:  # 30から45に増加（加速までの時間延長）
-                # 加速中は明るい色に
-                acceleration_color = 10 if pyxel.frame_count % 6 < 3 else 11
-            
-            if distance > 0:
-                # 最大半径を超えないように
-                max_radius = 20
-                display_x = self.joystick_center_x + dx * min(distance, max_radius) / distance
-                display_y = self.joystick_center_y + dy * min(distance, max_radius) / distance
-                
-                # 入力スティック
-                pyxel.circ(display_x, display_y, 5, acceleration_color)
-                pyxel.line(self.joystick_center_x, self.joystick_center_y, display_x, display_y, acceleration_color)
-                
-                # 感度と速度をフィードバック
-                speed_factor = min(distance / JOYSTICK_SENSITIVITY * JOYSTICK_MAX_SPEED_FACTOR, JOYSTICK_MAX_SPEED_FACTOR)
-                speed_radius = 5 + speed_factor * 3  # 速度に応じてサイズ変化
-                if speed_factor > 1.3:  # 1.5から1.3に減少（エフェクト表示閾値を下げる）
-                    # 高速時は追加エフェクト
-                    pyxel.circb(display_x, display_y, speed_radius, acceleration_color)
     
     def get_hit(self):
         """
