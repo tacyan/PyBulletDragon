@@ -8,7 +8,7 @@ import pyxel
 import math
 import time
 import os
-from utils.image_loader import DEBUG
+from utils.image_loader import DEBUG, ensure_pil_available
 
 # プレイヤー関連の定数
 PLAYER_SPEED = 5  # プレイヤーの移動速度（3から5に増加）
@@ -136,10 +136,52 @@ class Player:
         画像が見つからない場合はデフォルトサイズを使用します。
         """
         try:
-            # PILを使って画像サイズを直接取得（最も信頼性が高い方法）
+            # 方法1: イメージバンク0の内容から直接サイズを検出（最も信頼性が高い方法）
+            # 非透明ピクセルがある範囲を計算
+            min_x, min_y = 999, 999
+            max_x, max_y = 0, 0
+            found_pixels = False
+            
+            # スキャン範囲を広く取る（最大64x64まで）
+            scan_max = 64
+            
+            for y in range(scan_max):
+                for x in range(scan_max):
+                    # 2フレーム分のアニメーションのうち、1フレーム目だけをスキャン
+                    if pyxel.images[0].pget(x, y) != 0:  # 非透明ピクセル
+                        min_x = min(min_x, x)
+                        min_y = min(min_y, y)
+                        max_x = max(max_x, x)
+                        max_y = max(max_y, y)
+                        found_pixels = True
+            
+            if found_pixels:
+                # 非透明ピクセルが見つかった
+                width = max_x - min_x + 1
+                height = max_y - min_y + 1
+                
+                if DEBUG:
+                    print(f"バンク0から検出したサイズ: {width}x{height}, 範囲=({min_x},{min_y})-({max_x},{max_y})")
+                
+                # サイズの妥当性チェック（異常に小さい場合は除外）
+                if width >= 8 and height >= 8:
+                    # 画像の場合、高さの2倍まで幅を広げる（羽を含むため）
+                    # これにより、羽の部分もきちんと描画される
+                    self.width = max(width, min(64, int(height * 1.5)))
+                    self.height = height
+                    self.frame_offset = height  # 2フレーム目のオフセット
+                    
+                    if DEBUG:
+                        print(f"プレイヤー画像サイズを設定: {self.width}x{self.height}")
+                    return
+            
+            # 方法2: PILを使って画像サイズを直接取得（バックアップ方法）
             img_path = os.path.join("resources", "player.png")
             if os.path.exists(img_path):
-                try:
+                # PILが利用可能かを確認
+                pil_available = ensure_pil_available()
+                
+                if pil_available:
                     from PIL import Image
                     img = Image.open(img_path)
                     orig_width, orig_height = img.size
@@ -162,58 +204,17 @@ class Player:
                     self.frame_offset = height  # 2フレーム目のオフセット
                     
                     return
-                except Exception as e:
+                else:
                     if DEBUG:
-                        print(f"PIL画像サイズ取得エラー: {e}")
-                    # PILでエラーが発生した場合は後続のピクセルスキャン方法を試みる
+                        print("PILが利用できないため、デフォルトサイズを使用します")
             
-            # イメージバンク0の内容をスキャンして画像サイズを検出
-            max_x = 0
-            max_y = 0
-            min_x = 999
-            min_y = 999
-            
-            # 非透明ピクセルの範囲を検出（より正確な方法）
-            non_transparent_pixels = 0
-            for y in range(64):
-                for x in range(64):
-                    if pyxel.images[0].pget(x, y) != 0:  # 非透明ピクセルを見つけた
-                        non_transparent_pixels += 1
-                        max_x = max(max_x, x)
-                        max_y = max(max_y, y)
-                        min_x = min(min_x, x)
-                        min_y = min(min_y, y)
-            
-            if DEBUG:
-                print(f"ピクセルスキャン: 非透明ピクセル数={non_transparent_pixels}")
-                print(f"範囲: ({min_x},{min_y})-({max_x},{max_y})")
-            
-            # 実際の幅と高さを計算
-            if non_transparent_pixels > 0 and max_x >= min_x and max_y >= min_y:
-                width = max_x - min_x + 1
-                height = max_y - min_y + 1
-                
-                # 最小サイズを確保
-                width = max(16, width)
-                height = max(16, height)
-                
-                if DEBUG:
-                    print(f"検出されたプレイヤー画像サイズ: {width}x{height}")
-                
-                # デフォルトより大きいサイズの場合のみ採用
-                if width > 8 and height > 8:
-                    self.width = width
-                    self.height = height
-                    self.frame_offset = height
-                    return
-            
-            # 以上の方法で失敗した場合はデフォルトサイズを使用
+            # いずれの方法でも検出できなかった場合はデフォルトサイズを使用
             self.width = 32  # デフォルト幅
             self.height = 32  # デフォルト高さ
             self.frame_offset = self.height
             
             if DEBUG:
-                print(f"デフォルトサイズを使用: {self.width}x{self.height}")
+                print(f"デフォルトのサイズを使用: {self.width}x{self.height}")
             
         except Exception as e:
             if DEBUG:
@@ -222,8 +223,8 @@ class Player:
                 traceback.print_exc()
             
             # エラー時はデフォルトサイズを使用
-            self.width = 32  # デフォルト幅を大きめに
-            self.height = 32  # デフォルト高さを大きめに
+            self.width = 32
+            self.height = 32
             self.frame_offset = self.height
             
             if DEBUG:
@@ -513,106 +514,59 @@ class Player:
             if DEBUG and pyxel.frame_count % 60 == 0:
                 print(f"描画情報: フレーム={self.animation_frame}, オフセット={y_offset}, サイズ={self.width}x{self.height}")
             
-            # リソースの検証（透明でないピクセルがあるか確認）
-            has_content = False
-            non_transparent_pixels = 0
+            # コンテンツチェックは削除（速度向上のため）
+            # 常に完全なサイズを使用し、クリッピングをしない
             
-            # 効率的に内容をチェック（サンプリング）
-            check_step = max(1, min(self.width, self.height) // 4)
-            for check_y in range(0, self.height, check_step):
-                for check_x in range(0, self.width, check_step):
-                    if pyxel.images[0].pget(check_x, check_y + y_offset) != 0:
-                        has_content = True
-                        non_transparent_pixels += 1
+            # 必ずプレイヤーのスプライトを描画
+            pyxel.blt(
+                self.x, self.y,  # 描画位置
+                0,  # イメージバンク
+                0, y_offset,  # 画像上の位置
+                self.width, self.height,  # サイズ
+                0  # 透明色（黒）
+            )
             
             if DEBUG and pyxel.frame_count % 60 == 0:
-                print(f"コンテンツチェック: 非透明ピクセル数={non_transparent_pixels}, 有効={has_content}")
+                print(f"プレイヤースプライト描画: x={self.x}, y={self.y}, w={self.width}, h={self.height}, offset_y={y_offset}")
             
-            # PILから直接サイズを取得する代替手段（非常に小さいサイズの場合）
-            if self.width <= 8 or self.height <= 8:
-                try:
-                    img_path = os.path.join("resources", "player.png")
-                    if os.path.exists(img_path):
-                        from PIL import Image
-                        img = Image.open(img_path)
-                        pil_width, pil_height = img.size
-                        
-                        # 最大64x64に制限
-                        if pil_width > 64 or pil_height > 64:
-                            ratio = min(64 / pil_width, 64 / pil_height)
-                            pil_width = int(pil_width * ratio)
-                            pil_height = int(pil_height * ratio)
-                        
-                        # 大きすぎなければPILからのサイズを使用
-                        if pil_width > 8 and pil_height > 8:
-                            if DEBUG:
-                                print(f"小さすぎるサイズを検出: {self.width}x{self.height} → PILサイズ: {pil_width}x{pil_height}を使用")
-                            self.width = pil_width
-                            self.height = pil_height
-                            self.frame_offset = pil_height
-                except Exception as e:
-                    if DEBUG:
-                        print(f"PILサイズ取得エラー: {e}")
-            
-            # 内容が空でも強制的に表示する（デバッグ用）
-            display_anyway = True
-            
-            if has_content or display_anyway:
-                # プレイヤーのスプライトを描画
-                pyxel.blt(self.x, self.y, 0, 0, y_offset, self.width, self.height, 0)
-                
-                if DEBUG and pyxel.frame_count % 60 == 0:
-                    print(f"プレイヤースプライト描画: x={self.x}, y={self.y}, w={self.width}, h={self.height}, offset_y={y_offset}")
-            else:
-                # コンテンツが見つからない場合の対応（エラー時の表示）
-                if DEBUG and pyxel.frame_count % 60 == 0:
-                    print(f"警告: プレイヤースプライトにコンテンツがありません！ バンク0: (0,{y_offset})-({self.width},{y_offset+self.height})")
-                
-                # 代替表示（シンプルな四角形）
-                pyxel.rectb(self.x, self.y, self.width, self.height, 7)
-                pyxel.line(self.x, self.y, self.x + self.width - 1, self.y + self.height - 1, 7)
-                pyxel.line(self.x, self.y + self.height - 1, self.x + self.width - 1, self.y, 7)
-            
-            # エンジン推進エフェクト（下部）- 画像自体にエンジン炎が含まれているかも
-            engine_y = self.y + self.height
-            engine_center_x = self.x + self.width / 2
-            
-            # 追加のエンジンエフェクト（オプション）
-            if pyxel.frame_count % 8 < 4:
-                # 明るいエフェクト
-                pyxel.line(engine_center_x - 2, engine_y, 
-                          engine_center_x - 4, engine_y + 3, 7)
-                pyxel.line(engine_center_x + 2, engine_y, 
-                          engine_center_x + 4, engine_y + 3, 7)
-            else:
-                # 暗いエフェクト
-                pyxel.line(engine_center_x - 2, engine_y, 
-                          engine_center_x - 3, engine_y + 2, 10)
-                pyxel.line(engine_center_x + 2, engine_y, 
-                          engine_center_x + 3, engine_y + 2, 10)
-            
-            # 低速移動時の当たり判定表示
-            if self.is_focusing:
-                pyxel.circb(self.x + self.width/2, self.y + self.height/2, self.hitbox_radius, 7)
-            
-            # オプションの描画（小型のサブウェポン）
-            for opt_x, opt_y in self.options:
-                # オプションのエンジン炎も同様にアニメーション
-                if pyxel.frame_count % 8 < 4:
-                    # 明るいエフェクト
-                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 1, opt_y + 7, 7)
-                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 3, opt_y + 7, 7)
-                else:
-                    # 暗いエフェクト
-                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 1, opt_y + 6, 10)
-                    pyxel.line(opt_x + 2, opt_y + 5, opt_x + 3, opt_y + 6, 10)
-                
-                # オプションを描画
-                pyxel.blt(opt_x, opt_y, 0, 8, 0, 5, 6, 0)
+            # デバッグ用の描画（当たり判定の可視化）
+            if DEBUG and pyxel.btn(pyxel.KEY_D):
+                pyxel.circb(
+                    self.x + self.width / 2,
+                    self.y + self.height / 2,
+                    self.hitbox_radius,
+                    8  # 赤色で描画
+                )
         
-        # 弾の描画
-        for bullet in self.bullets:
-            bullet.draw()
+        # オプション（サブウェポン）の描画
+        for i, (opt_x, opt_y) in enumerate(self.options):
+            # オプションのフレームも本体と同期
+            option_y_offset = 0 if self.animation_frame == 0 else 16
+            pyxel.blt(opt_x, opt_y, 0, 40, option_y_offset, 16, 16, 0)
+            
+            if DEBUG and pyxel.btn(pyxel.KEY_D):
+                # オプションの当たり判定（小さめ）
+                pyxel.circb(opt_x + 8, opt_y + 8, 4, 12)
+        
+        # ボム使用時のエフェクト
+        if self.bomb > 0 and pyxel.btn(pyxel.KEY_X) and pyxel.frame_count % 3 == 0:
+            # ボム効果のビジュアルエフェクト
+            self.use_bomb()
+            
+        # 移動方向に応じたエフェクト（オプション）
+        if self.is_touching:
+            # タッチ操作中は指示点を表示
+            pyxel.circb(self.target_x + self.width / 2, self.target_y + self.height / 2, 3, 7)
+            
+            # ジョイスティックモードの場合は線を描画
+            if self.touch_control_mode == "joystick" and self.joystick_active:
+                pyxel.line(
+                    self.joystick_center_x,
+                    self.joystick_center_y,
+                    self.target_x + self.width / 2,
+                    self.target_y + self.height / 2,
+                    6
+                )
     
     def get_hit(self):
         """

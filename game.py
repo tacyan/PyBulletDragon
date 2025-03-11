@@ -24,6 +24,25 @@
 import pyxel
 import math
 import random
+import sys
+import os
+
+# Pyodide環境の場合にPillowをインポート
+if 'pyodide' in sys.modules:
+    try:
+        import asyncio
+        import micropip
+        
+        async def setup_pillow():
+            print("Pyodide環境を検出しました。必要なパッケージをインストールしています...")
+            await micropip.install('pillow')
+            print("Pillowのインストールが完了しました")
+        
+        # PILをインストール
+        asyncio.ensure_future(setup_pillow())
+    except Exception as e:
+        print(f"Pyodide環境設定中にエラーが発生しました: {e}")
+
 from entities.player import Player
 from entities.boss import Boss
 from entities.obstacle import Obstacle
