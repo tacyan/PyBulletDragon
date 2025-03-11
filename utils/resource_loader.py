@@ -147,8 +147,22 @@ def create_default_resources():
     
     # プレイヤーの弾を設定
     if DEBUG:
-        print("弾のリソースを設定...")
-    bullet_dimensions, _ = ImageLoader.load_bullet(0, 32, 0)
+        print("プレイヤーの弾のリソースを設定...")
+    
+    # 弾の設定 - より確実に
+    bullet_result, bullet_success = ImageLoader.load_bullet(0, 32, 0)
+    bullet_height, bullet_width = bullet_result
+    
+    if DEBUG:
+        print(f"プレイヤー弾のリソース設定結果: サイズ={bullet_width}x{bullet_height}, 成功={bullet_success}")
+        
+        # 弾が正しく設定されたか確認
+        bullet_non_transparent = 0
+        for cy in range(bullet_height):
+            for cx in range(bullet_width):
+                if pyxel.images[0].pget(32 + cx, 0 + cy) != 0:
+                    bullet_non_transparent += 1
+        print(f"プレイヤー弾の非透明ピクセル数: {bullet_non_transparent}")
     
     # オプション（サブウェポン）を設定
     if DEBUG:
@@ -186,7 +200,7 @@ def create_default_resources():
     
     # 弾の設定
     if DEBUG:
-        print("弾のリソースを設定...")
+        print("一般的な弾のリソースを設定...")
     PixelArt.create_bullet_small(2, 0, 0)
     PixelArt.create_bullet_medium(2, 8, 0)
     PixelArt.create_bullet_large(2, 16, 0)

@@ -476,9 +476,9 @@ class ImageLoader:
         @param {number} bank - イメージバンク番号
         @param {number} x - イメージバンク内のX座標
         @param {number} y - イメージバンク内のY座標
-        @returns {tuple} - 画像の高さと幅
+        @returns {tuple} - 画像の高さと幅、成功フラグのタプル
         """
-        # シャトルの弾の画像データ
+        # シャトルの弾の画像データ - より鮮明に
         bullet_pixels = [
             "00100",
             "01710",
@@ -488,7 +488,22 @@ class ImageLoader:
             "00100"
         ]
         
-        # ピクセル情報をPyxelのイメージバンクに直接設定
+        # まず領域をクリア
+        bullet_width = len(bullet_pixels[0])
+        bullet_height = len(bullet_pixels)
+        
+        # 安全のため、広めの領域をクリア
+        clear_width = bullet_width + 2
+        clear_height = bullet_height + 2
+        
+        for cy in range(clear_height):
+            for cx in range(clear_width):
+                pyxel.images[bank].pset(x + cx, y + cy, 0)
+        
+        if DEBUG:
+            print(f"弾のエリアをクリア: ({x},{y})-({x+clear_width},{y+clear_height})")
+        
+        # ピクセル情報をPyxelのイメージバンクに直接設定 - 鮮やかな色で
         for y_offset, row in enumerate(bullet_pixels):
             for x_offset, pixel in enumerate(row):
                 color = 0  # デフォルトは透明
@@ -496,11 +511,24 @@ class ImageLoader:
                 if pixel == "1":
                     color = 12  # 水色
                 elif pixel == "7":
-                    color = 7  # 白色
+                    color = 7   # 白色
                 
+                # 確実に設定
                 pyxel.images[bank].pset(x + x_offset, y + y_offset, color)
         
-        return len(bullet_pixels), len(bullet_pixels[0])  # 高さと幅を返す
+        # 念のため、実際に設定されたか確認
+        if DEBUG:
+            non_transparent = 0
+            for cy in range(bullet_height):
+                for cx in range(bullet_width):
+                    if pyxel.images[bank].pget(x + cx, y + cy) != 0:
+                        non_transparent += 1
+            print(f"弾の設定結果: 非透明ピクセル={non_transparent}、サイズ={bullet_width}x{bullet_height}")
+            
+            # デバッグ用にマップを保存
+            ImageLoader.debug_save_pixel_map(bank, x, y, bullet_width, bullet_height)
+        
+        return (bullet_height, bullet_width), True
     
     @staticmethod
     def load_option(bank, x, y):

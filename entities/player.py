@@ -69,13 +69,29 @@ class Bullet:
         """
         弾を描画します。
         """
-        # スペースシャトルの弾を描画
-        pyxel.blt(self.x - 2, self.y - 3, 0, 32, 0, 5, 6, 0)
+        # 弾のスプライトを描画 - 座標をより正確に調整
+        pyxel.blt(
+            int(self.x - 2.5),  # 中心に配置するため調整
+            int(self.y - 3),    # 位置調整
+            0,                  # イメージバンク
+            32, 0,              # 弾スプライトの位置
+            5, 6,               # 弾の幅と高さ
+            0                   # 透明色
+        )
         
-        # 発射エフェクト（オプション）
+        # 発射エフェクト（見た目を強化）
         if self.animation_frame < 2:
-            # 明るいエフェクト（点滅）
-            pyxel.pset(self.x, self.y + self.height - 1, 7)  # 白色の点
+            # 明るいエフェクト（点滅と軌跡）
+            pyxel.pset(self.x, self.y + 2, 7)  # 白色の点（中央）
+            
+            # 速度に応じた軌跡
+            trail_length = int(max(1, min(3, math.sqrt(self.vx**2 + self.vy**2) / 2)))
+            for i in range(1, trail_length + 1):
+                # 進行方向と逆に軌跡を描画
+                trail_x = int(self.x - (self.vx * i / 3))
+                trail_y = int(self.y - (self.vy * i / 3))
+                trail_color = 6 if i == 1 else 5  # 近い部分は明るく
+                pyxel.pset(trail_x, trail_y, trail_color)
 
 class Player:
     """
@@ -547,6 +563,10 @@ class Player:
             if DEBUG and pyxel.btn(pyxel.KEY_D):
                 # オプションの当たり判定（小さめ）
                 pyxel.circb(opt_x + 8, opt_y + 8, 4, 12)
+        
+        # 弾（ビーム）の描画 - 重要：これを追加し直す
+        for bullet in self.bullets:
+            bullet.draw()
         
         # ボム使用時のエフェクト
         if self.bomb > 0 and pyxel.btn(pyxel.KEY_X) and pyxel.frame_count % 3 == 0:
