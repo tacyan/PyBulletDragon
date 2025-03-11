@@ -33,16 +33,34 @@ if 'pyodide' in sys.modules:
         import asyncio
         import micropip
         
-        async def setup_pillow():
-            print("Pyodide環境を検出しました。必要なパッケージをインストールしています...")
-            await micropip.install('pillow')
-            print("Pillowのインストールが完了しました")
-        
-        # PILをインストール
-        asyncio.ensure_future(setup_pillow())
+        # PILのインポートを試みる
+        try:
+            from PIL import Image
+            print("PILは既にインストールされています")
+        except ImportError:
+            # PILがない場合は非同期でインストール
+            async def setup_pillow():
+                print("Pyodide環境を検出しました。必要なパッケージをインストールしています...")
+                await micropip.install('pillow')
+                print("Pillowのインストールが完了しました")
+            
+            # 非同期関数を実行
+            asyncio.ensure_future(setup_pillow())
+            
+            # インストールを少し待機
+            import time
+            for i in range(3):
+                time.sleep(1)
+                try:
+                    from PIL import Image
+                    print(f"PILが利用可能になりました（{i+1}秒後）")
+                    break
+                except ImportError:
+                    print(f"PILインストール待機中... {i+1}秒経過")
     except Exception as e:
         print(f"Pyodide環境設定中にエラーが発生しました: {e}")
 
+# 本来のインポートより先にPyodideの設定を完了させる
 from entities.player import Player
 from entities.boss import Boss
 from entities.obstacle import Obstacle

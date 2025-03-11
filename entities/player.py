@@ -8,6 +8,7 @@ import pyxel
 import math
 import time
 import os
+import sys
 from utils.image_loader import DEBUG, ensure_pil_available
 
 # プレイヤー関連の定数
@@ -20,6 +21,9 @@ DOUBLE_TAP_TIME = 0.3  # ダブルタップの時間閾値（秒）
 CONTROL_AREA_HEIGHT = 200  # 操作領域の高さ（画面下部から）
 JOYSTICK_MAX_SPEED_FACTOR = 1.8  # ジョイスティック最大速度倍率（2.5から1.8に減少）
 JOYSTICK_SENSITIVITY = 25  # ジョイスティック感度（小さいほど敏感）
+
+# PILエラー時のフォールバックのためのフラグ
+FALLBACK_ON_PIL_ERROR = True
 
 class Bullet:
     """
@@ -198,28 +202,33 @@ class Player:
                 pil_available = ensure_pil_available()
                 
                 if pil_available:
-                    from PIL import Image
-                    img = Image.open(img_path)
-                    orig_width, orig_height = img.size
-                    
-                    # リサイズが必要かチェック
-                    if orig_width > 64 or orig_height > 64:
-                        ratio = min(64 / orig_width, 64 / orig_height)
-                        width = max(16, int(orig_width * ratio))  # 最小サイズを16に制限
-                        height = max(16, int(orig_height * ratio))
-                    else:
-                        width = orig_width
-                        height = orig_height
-                    
-                    if DEBUG:
-                        print(f"PIL から直接サイズを取得: 元のサイズ={orig_width}x{orig_height}, 使用サイズ={width}x{height}")
-                    
-                    # 検出されたサイズを設定
-                    self.width = width
-                    self.height = height
-                    self.frame_offset = height  # 2フレーム目のオフセット
-                    
-                    return
+                    try:
+                        # PIL動的インポート
+                        from PIL import Image
+                        img = Image.open(img_path)
+                        orig_width, orig_height = img.size
+                        
+                        # リサイズが必要かチェック
+                        if orig_width > 64 or orig_height > 64:
+                            ratio = min(64 / orig_width, 64 / orig_height)
+                            width = max(16, int(orig_width * ratio))  # 最小サイズを16に制限
+                            height = max(16, int(orig_height * ratio))
+                        else:
+                            width = orig_width
+                            height = orig_height
+                        
+                        if DEBUG:
+                            print(f"PIL から直接サイズを取得: 元のサイズ={orig_width}x{orig_height}, 使用サイズ={width}x{height}")
+                        
+                        # 検出されたサイズを設定
+                        self.width = width
+                        self.height = height
+                        self.frame_offset = height  # 2フレーム目のオフセット
+                        
+                        return
+                    except Exception as e:
+                        if DEBUG:
+                            print(f"PILを使用した画像サイズの検出中にエラー: {e}")
                 else:
                     if DEBUG:
                         print("PILが利用できないため、デフォルトサイズを使用します")

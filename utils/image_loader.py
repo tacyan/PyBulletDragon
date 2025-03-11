@@ -12,6 +12,9 @@ import math
 # デバッグモード（Trueにすると詳細な情報を出力）
 DEBUG = True
 
+# PILエラー時の代替データを提供するフラグ
+USE_FALLBACK_DATA = True
+
 # Pyodide環境でPillowをロードするための関数
 def ensure_pil_available():
     """
@@ -22,7 +25,7 @@ def ensure_pil_available():
     """
     try:
         # すでにインポートできる場合は何もしない
-        from PIL import Image
+        __import__('PIL.Image')
         return True
     except ImportError:
         # Pyodide環境かどうか確認
@@ -50,7 +53,7 @@ def ensure_pil_available():
                 for i in range(5):  # 最大5秒待機
                     time.sleep(1)
                     try:
-                        from PIL import Image
+                        __import__('PIL.Image')
                         if DEBUG:
                             print("Pillowが正常にインポートできるようになりました")
                         return True
@@ -242,18 +245,27 @@ class ImageLoader:
                 return ImageLoader.load_space_shuttle(bank, x, y), False
         
         try:
-            # PILでイメージを開く
-            from PIL import Image, ImageEnhance
+            # PILを動的にインポート - tryブロック内で行う
+            try:
+                from PIL import Image, ImageEnhance
+            except ImportError:
+                if debug:
+                    print("PILのインポートに失敗しました。デフォルト画像を使用します。")
+                return ImageLoader.load_space_shuttle(bank, x, y), False
             
             img = Image.open(img_path)
             
             # 画像の鮮明さを上げる（羽などの細部が見やすくなる）
-            enhancer = ImageEnhance.Sharpness(img)
-            img = enhancer.enhance(1.5)  # シャープネスを1.5倍に
-            
-            # コントラストも少し上げる
-            enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(1.2)  # コントラストを1.2倍に
+            try:
+                enhancer = ImageEnhance.Sharpness(img)
+                img = enhancer.enhance(1.5)  # シャープネスを1.5倍に
+                
+                # コントラストも少し上げる
+                enhancer = ImageEnhance.Contrast(img)
+                img = enhancer.enhance(1.2)  # コントラストを1.2倍に
+            except Exception as e:
+                if debug:
+                    print(f"画像の強調処理中にエラーが発生しました（無視して続行）: {e}")
             
             # サイズチェック
             width, height = img.size
@@ -266,7 +278,17 @@ class ImageLoader:
                 new_height = int(height * ratio)
                 
                 # リサイズするときは高品質なLANCZOSフィルタを使用
-                img = img.resize((new_width, new_height), Image.LANCZOS)
+                try:
+                    img = img.resize((new_width, new_height), Image.LANCZOS)
+                except Exception:
+                    # LANCZOSが使えない場合は別のフィルタを試す
+                    try:
+                        img = img.resize((new_width, new_height), Image.BICUBIC)
+                    except Exception as e:
+                        if debug:
+                            print(f"画像のリサイズに失敗しました: {e}")
+                        return ImageLoader.load_space_shuttle(bank, x, y), False
+                
                 width, height = img.size
                 if debug:
                     print(f"画像をリサイズしました: {width}x{height}")
@@ -280,12 +302,21 @@ class ImageLoader:
                     print(f"画像モードを{img.mode}からRGBAに変換します")
                 if img.mode == 'RGB':
                     # RGBからRGBAに変換（透明度は最大に）
-                    rgba = Image.new("RGBA", img.size)
-                    rgba.paste(img, (0, 0))
-                    img = rgba
+                    try:
+                        rgba = Image.new("RGBA", img.size)
+                        rgba.paste(img, (0, 0))
+                        img = rgba
+                    except Exception as e:
+                        if debug:
+                            print(f"RGBAへの変換に失敗しました: {e}")
                 else:
                     # その他のモードはRGBAに変換
-                    img = img.convert('RGBA')
+                    try:
+                        img = img.convert('RGBA')
+                    except Exception as e:
+                        if debug:
+                            print(f"RGBA変換に失敗しました: {e}")
+                        return ImageLoader.load_space_shuttle(bank, x, y), False
             
             # イメージバンクをクリア（重要）
             for clear_y in range(height * 2):  # 2フレーム分の領域をクリア
@@ -298,7 +329,13 @@ class ImageLoader:
             
             for py in range(height):
                 for px in range(width):
-                    r, g, b, a = img.getpixel((px, py))
+                    try:
+                        r, g, b, a = img.getpixel((px, py))
+                    except Exception as e:
+                        if debug:
+                            print(f"ピクセル({px},{py})の取得に失敗しました: {e}")
+                        # エラー時はデフォルト値
+                        r, g, b, a = 0, 0, 0, 0
                     
                     # 透明度処理（より細かく）- 羽の表示を改善するために透明度閾値を下げる
                     if a < 30:  # 閾値を50から30に下げて、薄い部分も表示
