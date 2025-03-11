@@ -265,6 +265,28 @@ class Player:
         # タッチ操作
         self.handle_touch_input()
         
+        # 目標位置への滑らかな移動
+        if self.x != self.target_x or self.y != self.target_y:
+            # 移動速度の計算（低速移動モードか通常かで分岐）
+            move_speed = self.focus_speed if self.is_focusing else PLAYER_SPEED
+            
+            # 既存のmove_smoothnessプロパティを利用（0.4が初期値）
+            easing_factor = self.move_smoothness
+            
+            # 現在位置と目標位置の差分を計算
+            dx = self.target_x - self.x
+            dy = self.target_y - self.y
+            
+            # 距離に応じたスムージング（イージング）
+            self.x += dx * easing_factor
+            self.y += dy * easing_factor
+            
+            # ごく小さな差分の場合は位置を合わせる（浮動小数点の誤差防止）
+            if abs(dx) < 0.5:
+                self.x = self.target_x
+            if abs(dy) < 0.5:
+                self.y = self.target_y
+        
         # ショットクールダウンを減少
         if self.shot_cooldown > 0:
             self.shot_cooldown -= 1
@@ -427,7 +449,7 @@ class Player:
                 else:
                     # 画面上部のタッチなら直接移動（ダイレクトタッチモード）
                     if pyxel.mouse_y < pyxel.height - CONTROL_AREA_HEIGHT:
-                        # タップした位置に直接移動（中心位置を合わせる）
+                        # タップした位置を目標位置として設定（中心位置を合わせる）
                         self.target_x = pyxel.mouse_x - self.width / 2
                         self.target_y = pyxel.mouse_y - self.height / 2
                         
@@ -435,9 +457,7 @@ class Player:
                         self.target_x = max(0, min(self.target_x, pyxel.width - self.width))
                         self.target_y = max(0, min(self.target_y, pyxel.height - self.height))
                         
-                        # 直接位置を更新（より即応性を高める）
-                        self.x = self.target_x
-                        self.y = self.target_y
+                        # 注：直接位置更新を削除し、updateメソッドでの滑らかな移動に任せる
         
         # タッチ終了
         if pyxel.btnr(pyxel.MOUSE_BUTTON_LEFT):

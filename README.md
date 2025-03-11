@@ -49,11 +49,22 @@ Pyxel アプリケーションファイル (.pyxapp) は、pyxel packageコマ�
 pyxel package アプリケーションのディレクトリ 起動スクリプトファイル
 ```
 
+例
+```
+pyxel package . game.py 
+```
+
 Pyxel アプリケーションファイルは、pyxel app2exeコマンドやpyxel app2htmlコマンドで、実行可能ファイルや HTML ファイルに変換できます。
 ここでは、PyBulletDragon.pyxappをHTML形式にしたら、PyBulletDragon.htmlが作成されます。
 
 ```
 pyxel app2html PyBulletDragon.pyxapp
+```
+
+## サーバー起動方法
+
+```
+python -m http.server 8000
 ```
 
 ## プロジェクト構成
